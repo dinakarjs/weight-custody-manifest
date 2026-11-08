@@ -6,8 +6,6 @@ uses semantic-ish versioning while pre-1.0.
 
 ## Unreleased
 
-Bind `proof.tree_size` to `len(tree)` and validate proof/root/size shapes in `wcm._merkle.MerkleTree.verify_inclusion` and `verify_consistency` (#238).
-
 **Fixed, security (#225).** `_b64url_decode` in `wcm._signing` and base64url
 verification in `runtime_records`, `renewal`, and `memory_sweep` now enforce
 canonical unpadded RFC 4648 section 5 encoding (`^[A-Za-z0-9\-_]*$`,
@@ -27,6 +25,22 @@ chain had verified. Where `AzureSnpVtpmVerifier`, `QuoteVerifier` or
 `NvidiaGpuVerifier` was configured in `KeyBrokerService`, the exception left
 `verify_and_release` after the challenge nonce had been consumed; no key was
 released. Each is now a denial whose reason names the exception type.
+
+**Fixed, security (#238).** Reject malformed consistency roots rather than
+accepting equal short or empty roots as a consistent log. Bind tree-local
+inclusion proofs to the actual tree size. Validate inclusion proof hashes and
+paths in the shared reconstruction helper so the exported monitor verifier
+refuses malformed nodes instead of raising a concatenation error. Reject
+empty claimed roots and failed reconstruction explicitly; the failure sentinel
+must never compare equal to an empty claimed root. Inclusion checking still
+requires a trusted tree head; it does not authenticate the head's signature.
+
+Preserve bytes, bytearray, and memoryview hash/leaf inputs, list/tuple proof
+paths, and non-Boolean integer subclasses for indices and sizes. Normalize
+hash material before combining it. Boolean indices/sizes, invalid hash lengths,
+and truncated or excessive proof paths remain rejected. These rules cover
+leaf insertion, proof generation, shared reconstruction, and both inclusion
+and consistency verification.
 
 ## 0.33.1 - 2026-10-19
 
