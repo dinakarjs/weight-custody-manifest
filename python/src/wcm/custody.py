@@ -151,7 +151,7 @@ def parse_cadence(text: str) -> int:
     """Parse a cadence like ``"24h"`` / ``"15m"`` / ``"30s"`` / ``"1d"`` to seconds."""
     if not isinstance(text, str):
         raise ValueError(
-            f"invalid cadence {text!r}; expected an integer with unit d/h/m/s, e.g. '24h'"
+            f"invalid cadence type {type(text).__name__}; expected a string such as '24h'"
         )
     match = _CADENCE_RE.fullmatch(text)
     if not match:

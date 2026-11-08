@@ -842,8 +842,35 @@ def test_enclave_session_and_parse_cadence_validate_types():
         with pytest.raises(ValueError, match="max_operations"):
             EnclaveSession(KEY, cadence_seconds=60, max_operations=bad_ops)  # type: ignore[arg-type]
     s = EnclaveSession(KEY, cadence_seconds=60)
-    with pytest.raises(ValueError, match="poll_interval"):
-        asyncio.run(s.monitor(poll_interval=True))  # type: ignore[arg-type]
+    async def run_monitor():
+        await asyncio.wait_for(s.monitor(poll_interval=True), timeout=0.5)
+
+    try:
+        with pytest.raises(ValueError, match="poll_interval"):
+            asyncio.run(run_monitor())
+    finally:
+        s.zeroize()
     for bad_text in ("٢٤h", 24, None):
         with pytest.raises(ValueError, match="invalid cadence"):
             parse_cadence(bad_text)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", [b"SYNTHETIC_SECRET", {"api_key": "SYNTHETIC_SECRET"}])
+def test_cadence_type_error_does_not_disclose_value(value):
+    from wcm.custody import parse_cadence
+
+    with pytest.raises(ValueError, match="invalid cadence type") as caught:
+        parse_cadence(value)
+    assert "SYNTHETIC_SECRET" not in str(caught.value)
+    assert type(value).__name__ in str(caught.value)
+
+
+def test_cadence_type_error_does_not_call_repr():
+    from wcm.custody import parse_cadence
+
+    class Unrepresentable:
+        def __repr__(self):
+            raise AssertionError("diagnostic must not inspect the value")
+
+    with pytest.raises(ValueError, match="invalid cadence type Unrepresentable"):
+        parse_cadence(Unrepresentable())

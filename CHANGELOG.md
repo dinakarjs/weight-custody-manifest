@@ -6,7 +6,18 @@ uses semantic-ish versioning while pre-1.0.
 
 ## Unreleased
 
-Validate non-empty `bytes`/`bytearray` `key`, exact `int` `cadence_seconds`/`max_operations`, non-boolean `poll_interval`, and ASCII-digit `parse_cadence` in `wcm.custody` (#240).
+**Fixed, security (#240).** Reject integer key inputs in `EnclaveSession`:
+previously, `bytearray(32)` silently created a 32-byte all-zero key. Require a
+non-empty `bytes` or `bytearray` key. Non-string `parse_cadence` errors report
+only the input type, without echoing potentially sensitive values.
+
+**Changed (behaviour, #240).** `cadence_seconds` and `max_operations` now require
+exact positive integers, rejecting previously accepted fractional values.
+`memoryview` keys are rejected; callers must explicitly provide `bytes` or
+`bytearray`. `parse_cadence` now accepts only ASCII digits and whitespace,
+rejecting previously accepted Unicode digits and non-ASCII whitespace.
+Boolean polling intervals are rejected. Use integer limits and ASCII cadence
+strings; converting key buffers may create additional copies of key material.
 
 **Fixed, security (#225).** `_b64url_decode` in `wcm._signing` and base64url
 verification in `runtime_records`, `renewal`, and `memory_sweep` now enforce
