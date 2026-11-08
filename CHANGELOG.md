@@ -6,8 +6,6 @@ uses semantic-ish versioning while pre-1.0.
 
 ## Unreleased
 
-Enforce the RFC 8785 safe-integer bound (`-(2**53 - 1)..(2**53 - 1)`), reject non-string dictionary keys with `TypeError`, and reject lone UTF-16 surrogates (`0xD800..0xDFFF`) with `ValueError` in `wcm._canonicalize` (#237).
-
 **Fixed, security (#225).** `_b64url_decode` in `wcm._signing` and base64url
 verification in `runtime_records`, `renewal`, and `memory_sweep` now enforce
 canonical unpadded RFC 4648 section 5 encoding (`^[A-Za-z0-9\-_]*$`,
@@ -27,6 +25,26 @@ chain had verified. Where `AzureSnpVtpmVerifier`, `QuoteVerifier` or
 `NvidiaGpuVerifier` was configured in `KeyBrokerService`, the exception left
 `verify_and_release` after the challenge nonce had been consumed; no key was
 released. Each is now a denial whose reason names the exception type.
+
+**Fixed (#237).** Reject non-string dictionary keys with `TypeError` rather
+than leaking an `AttributeError` outside callers' validation-error handling.
+Reject lone UTF-16 surrogates explicitly with `ValueError`; such inputs were
+already refused during encoding, so this clarifies the diagnostic.
+
+**Changed (behaviour, breaking for large-integer callers, #237).** Python
+integers outside `-(2**53 - 1)..(2**53 - 1)` now raise `ValueError`, including
+through `TransparencyLog.append` and `make_leaf_preimage`. Previously accepted
+uint64 bitmasks and nanosecond timestamps can therefore fail. This is the SDK's
+exact-integer interoperability policy (RFC 7493 section 2.2 and RFC 8785
+Appendix B note 1), not a blanket RFC prohibition on larger floating values.
+Finite-float acceptance and formatting are unchanged; casting integers to
+float can silently lose precision and is not a migration strategy.
+
+For new statements, agree an exact string encoding with all consumers and the
+applicable schema. A string has a different signed preimage from a number:
+do not rewrite existing log entries or assume prior signatures/proofs survive
+conversion. There is no automatic migration of historical large-integer
+statements. This change does not establish full floating-point JCS conformance.
 
 ## 0.33.1 - 2026-10-19
 

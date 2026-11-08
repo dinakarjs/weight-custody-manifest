@@ -13,9 +13,22 @@ one tool verifies under another.
 
 Rules:
   - Null-valued optional fields are EXCLUDED from canonical form by default.
-  - Object keys are sorted by Unicode code point (RFC 8785 section 3.2.3).
+  - Object keys must be strings and are sorted by UTF-16 code units
+    (RFC 8785 section 3.2.3).
   - Strings (values and keys) must already be NFC; anything else is refused
     rather than normalized, so distinct inputs never share a pre-image.
+  - Lone UTF-16 surrogates are rejected in keys and values.
+  - Python integers must be in the SDK's safe integer domain, +/- (2**53 - 1).
+    This exact-integer interoperability policy follows RFC 7493 section 2.2;
+    it is not a magnitude limit on floating-point values in RFC 8785.
+    Finite floats retain their existing serialization behavior. A float may
+    already have lost integer precision before reaching this function.
+
+For larger exact integers, agree a string representation with consumers and
+the applicable schema before creating new signed/logged statements. Do not
+cast to float to bypass the integer policy. Changing a number to a string
+changes the signed preimage; existing signatures and log history cannot be
+silently migrated. This policy does not establish full float JCS conformance.
 """
 from __future__ import annotations
 
@@ -26,7 +39,7 @@ from typing import Any
 
 
 _MAX_DEPTH = 64  # prevent RecursionError from deeply nested JSON
-_MAX_SAFE_INTEGER = 9007199254740991  # 2**53 - 1 (RFC 8785 §3.2.2.3)
+_MAX_SAFE_INTEGER = 9007199254740991  # RFC 7493 §2.2; RFC 8785 Appendix B note 1
 
 
 def canonicalize(obj: Any, *, exclude_none: bool = True) -> bytes:
@@ -42,8 +55,10 @@ def canonicalize(obj: Any, *, exclude_none: bool = True) -> bytes:
         UTF-8 encoded bytes with no trailing newline.
 
     Raises:
-        TypeError: If *obj* contains a non-serializable type.
-        ValueError: If a float is NaN or Infinity, or nesting exceeds the max.
+        TypeError: If *obj* contains a non-serializable type or non-string key.
+        ValueError: If an integer exceeds the SDK safe integer domain, a float
+            is NaN or Infinity, a string is non-NFC or contains a lone UTF-16
+            surrogate, or nesting exceeds the maximum.
     """
     return _serialize(obj, exclude_none=exclude_none, depth=0).encode("utf-8")
 
@@ -87,8 +102,9 @@ def _serialize(obj: Any, *, exclude_none: bool, depth: int) -> str:
     if isinstance(obj, int):
         if not -_MAX_SAFE_INTEGER <= obj <= _MAX_SAFE_INTEGER:
             raise ValueError(
-                f"integer {obj} is outside the safe integer domain RFC 8785 can "
-                f"serialize (+/-{_MAX_SAFE_INTEGER})"
+                f"integer is outside the SDK safe integer domain (+/-{_MAX_SAFE_INTEGER}); "
+                "use a schema-agreed string representation for exact large values, "
+                "not a float cast"
             )
         return str(obj)
     if isinstance(obj, float):

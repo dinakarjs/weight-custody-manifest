@@ -105,6 +105,18 @@ def test_accept_safe_integer_boundary():
     assert canonicalize({"v": -(2**53 - 1)}) == b'{"v":-9007199254740991}'
 
 
+def test_large_integer_diagnostic_does_not_recommend_float_conversion():
+    with pytest.raises(ValueError, match="schema-agreed string.*not a float cast"):
+        canonicalize({"v": 2**64 - 1})
+
+
+def test_integer_policy_does_not_add_a_float_magnitude_limit():
+    # This tests acceptance only, not full RFC 8785 float formatting.
+    for value in (float(2**53), float(2**64), 1e30, -1e30):
+        assert isinstance(canonicalize({"v": value}), bytes)
+    assert float(2**53) == float(2**53 + 1)  # prior precision cannot be recovered
+
+
 @pytest.mark.parametrize("bad_key", [1, None, (1, 2)])
 def test_reject_non_string_dict_key(bad_key):
     with pytest.raises(TypeError, match="not a string"):
