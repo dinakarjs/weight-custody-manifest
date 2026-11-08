@@ -66,11 +66,11 @@ class Share:
     """One Shamir share: the x-coordinate and the per-byte y-values."""
 
     x: int  # 1..255, distinct per share
-    y: bytes  # one GF(256) evaluation per secret byte
+    y: bytes | bytearray | memoryview  # one GF(256) evaluation per secret byte
 
 
 def split_secret(
-    secret: bytes,
+    secret: bytes | bytearray | memoryview,
     *,
     threshold: int,
     shares: int,
@@ -83,10 +83,17 @@ def split_secret(
             tests, defaults to a cryptographic RNG.
 
     Raises:
-        ValueError: on empty secret or out-of-range threshold/shares.
+        ValueError: on an empty/non-bytes-like secret, invalid threshold/shares,
+            or an RNG result that is not bytes of exactly threshold - 1 length.
+
+    Bytes-like secrets are copied to bytes before splitting. This snapshot is
+    not zeroizable; accepting a mutable input does not promise memory erasure.
     """
-    if type(secret) is not bytes or not secret:
-        raise ValueError("secret must be non-empty bytes")
+    if not isinstance(secret, (bytes, bytearray, memoryview)):
+        raise ValueError("secret must be bytes-like")
+    secret = bytes(secret)
+    if not secret:
+        raise ValueError("secret must be non-empty")
     if type(threshold) is not int or type(shares) is not int or not 2 <= threshold <= shares <= 255:
         raise ValueError("require integer 2 <= threshold <= shares <= 255")
 
@@ -105,7 +112,7 @@ def split_secret(
     return [Share(x=x, y=bytes(y)) for x, y in zip(xs, ys)]
 
 
-def combine_shares(shares: list[Share]) -> bytes:
+def combine_shares(shares: list[Share] | tuple[Share, ...]) -> bytes:
     """Reconstruct the secret from *shares* (Lagrange interpolation at x=0).
 
     Any ``threshold`` correct shares recover the secret; fewer recover a
@@ -113,10 +120,18 @@ def combine_shares(shares: list[Share]) -> bytes:
     the scheme, so the caller must supply at least the threshold).
 
     Raises:
-        ValueError: on no shares, duplicate x, or mismatched share lengths.
+        ValueError: on an invalid container/member, no shares, invalid or
+            duplicate x, or empty/non-bytes-like/mismatched y-values.
+
+    Lists and tuples are accepted. Bytes-like y-values are copied before
+    interpolation; these snapshots are not zeroizable.
     """
-    if not isinstance(shares, list) or not shares or any(not isinstance(s, Share) for s in shares):
+    if not isinstance(shares, (list, tuple)):
+        raise ValueError("shares must be a list or tuple of Share objects")
+    if not shares:
         raise ValueError("need at least one Share")
+    if any(not isinstance(s, Share) for s in shares):
+        raise ValueError("each share must be a Share object")
     xs = [s.x for s in shares]
     # x=0 is the secret's own coordinate: a share there would dictate the
     # output. Above 255 is outside GF(256).
@@ -124,10 +139,13 @@ def combine_shares(shares: list[Share]) -> bytes:
         raise ValueError("share x-coordinates must be integers in 1..255")
     if len(set(xs)) != len(xs):
         raise ValueError("shares must have distinct x-coordinates")
-    if any(type(s.y) is not bytes or not s.y for s in shares):
-        raise ValueError("share y-values must be non-empty bytes")
-    length = len(shares[0].y)
-    if any(len(s.y) != length for s in shares):
+    if any(not isinstance(s.y, (bytes, bytearray, memoryview)) for s in shares):
+        raise ValueError("share y-values must be bytes-like")
+    ys = [bytes(s.y) for s in shares]
+    if any(not y for y in ys):
+        raise ValueError("share y-values must be non-empty")
+    length = len(ys[0])
+    if any(len(y) != length for y in ys):
         raise ValueError("all shares must have the same length")
 
     secret = bytearray()
@@ -140,6 +158,6 @@ def combine_shares(shares: list[Share]) -> bytes:
                     continue
                 num = _mul(num, sj.x)  # (0 - x_j) == x_j in GF(256)
                 den = _mul(den, si.x ^ sj.x)
-            acc ^= _mul(si.y[pos], _div(num, den))
+            acc ^= _mul(ys[i][pos], _div(num, den))
         secret.append(acc)
     return bytes(secret)

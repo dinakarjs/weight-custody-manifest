@@ -34,7 +34,19 @@ chain had verified. Where `AzureSnpVtpmVerifier`, `QuoteVerifier` or
 `verify_and_release` after the challenge nonce had been consumed; no key was
 released. Each is now a denial whose reason names the exception type.
 
-- Validate `bytes` secrets/shares, exact `int` threshold/shares, and RNG output length in `wcm.threshold`, and validate `ttl_seconds` and `nonce` types in `wcm._challenge.ChallengeStore` (#239).
+**Fixed, security (#239).** Reject RNG results of incorrect type or length in
+threshold splitting. A short RNG result previously reduced the polynomial
+degree, allowing reconstruction below the declared quorum. Preserve support
+for `bytes`, `bytearray`, and `memoryview` secrets/share values, and lists or
+tuples of shares, while rejecting empty or malformed values. Buffer inputs
+are copied internally; this does not provide zeroizable temporary storage.
+
+**Changed (behaviour, #239).** `ChallengeStore` now requires an exact positive
+integer TTL; previously accepted fractional TTLs now raise `ValueError`.
+Zero/negative TTLs are rejected at construction instead of issuing unusable
+challenges. Invalid nonce types are refused defensively. Threshold/share
+counts require exact integers; RNG callbacks must return the requested
+number of bytes. The RNG-length check does not establish RNG entropy.
 
 
 ## 0.33.1 - 2026-10-19
