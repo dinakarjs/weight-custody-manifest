@@ -1,7 +1,6 @@
 """Signed, hash-chained custody runtime records for protected controllers."""
 from __future__ import annotations
 
-import base64
 import binascii
 from dataclasses import asdict, dataclass
 from enum import Enum
@@ -109,6 +108,11 @@ def sign_runtime_record(
         raise TypeError("runtime record sequence must be a non-boolean integer")
     if sequence < 0 or (previous is None) != (sequence == 0):
         raise ValueError("sequence 0 must be the first record; later records require previous")
+    if previous is not None:
+        if isinstance(previous.sequence, bool) or not isinstance(previous.sequence, int):
+            raise TypeError("previous runtime record sequence must be a non-boolean integer")
+        if previous.sequence < 0:
+            raise ValueError("previous runtime record sequence must be non-negative")
     if previous is not None and previous.sequence + 1 != sequence:
         raise ValueError("runtime record sequence is not contiguous")
     if not occurred_at.endswith("Z"):
